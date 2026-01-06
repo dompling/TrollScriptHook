@@ -226,10 +226,36 @@ static NSDictionary *buildNotificationInfo(UNNotificationContent *content,
     return [info copy];
 }
 
-// MARK: - Original Method Storage
+// MARK: - Associated Object Keys for Original IMPs
 
-static IMP _originalWillPresentNotification = NULL;
-static IMP _originalDidReceiveResponse = NULL;
+static const char kOriginalWillPresentKey;
+static const char kOriginalDidReceiveKey;
+
+// MARK: - Original IMP Storage (Per-Class using Associated Objects)
+
+static void setOriginalWillPresentIMP(Class cls, IMP imp) {
+    if (cls && imp) {
+        objc_setAssociatedObject(cls, &kOriginalWillPresentKey, [NSValue valueWithPointer:imp], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+}
+
+static IMP getOriginalWillPresentIMP(Class cls) {
+    if (!cls) return NULL;
+    NSValue *value = objc_getAssociatedObject(cls, &kOriginalWillPresentKey);
+    return value ? [value pointerValue] : NULL;
+}
+
+static void setOriginalDidReceiveIMP(Class cls, IMP imp) {
+    if (cls && imp) {
+        objc_setAssociatedObject(cls, &kOriginalDidReceiveKey, [NSValue valueWithPointer:imp], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+}
+
+static IMP getOriginalDidReceiveIMP(Class cls) {
+    if (!cls) return NULL;
+    NSValue *value = objc_getAssociatedObject(cls, &kOriginalDidReceiveKey);
+    return value ? [value pointerValue] : NULL;
+}
 
 // MARK: - Swizzled Methods
 
@@ -250,10 +276,13 @@ static void swizzled_willPresentNotification(id self, SEL _cmd,
         NSLog(@"[TrollScriptHook] Error in willPresentNotification: %@", e);
     }
 
+    // 获取该类的原始方法
+    IMP originalIMP = getOriginalWillPresentIMP([self class]);
+
     // 调用原始方法
-    if (_originalWillPresentNotification) {
+    if (originalIMP) {
         ((void (*)(id, SEL, UNUserNotificationCenter *, UNNotification *, void (^)(UNNotificationPresentationOptions)))
-         _originalWillPresentNotification)(self, _cmd, center, notification, completionHandler);
+         originalIMP)(self, _cmd, center, notification, completionHandler);
     } else if (completionHandler) {
         // 默认行为：显示通知
         if (@available(iOS 14.0, *)) {
@@ -283,10 +312,13 @@ static void swizzled_didReceiveResponse(id self, SEL _cmd,
         NSLog(@"[TrollScriptHook] Error in didReceiveResponse: %@", e);
     }
 
+    // 获取该类的原始方法
+    IMP originalIMP = getOriginalDidReceiveIMP([self class]);
+
     // 调用原始方法
-    if (_originalDidReceiveResponse) {
+    if (originalIMP) {
         ((void (*)(id, SEL, UNUserNotificationCenter *, UNNotificationResponse *, void (^)(void)))
-         _originalDidReceiveResponse)(self, _cmd, center, response, completionHandler);
+         originalIMP)(self, _cmd, center, response, completionHandler);
     } else if (completionHandler) {
         completionHandler();
     }
@@ -316,11 +348,12 @@ static void hookDelegateClass(Class delegateClass) {
     if (class_respondsToSelector(delegateClass, willPresentSel)) {
         Method originalMethod = class_getInstanceMethod(delegateClass, willPresentSel);
         if (originalMethod) {
-            _originalWillPresentNotification = method_setImplementation(originalMethod, (IMP)swizzled_willPresentNotification);
+            IMP originalIMP = method_setImplementation(originalMethod, (IMP)swizzled_willPresentNotification);
+            setOriginalWillPresentIMP(delegateClass, originalIMP);
             NSLog(@"[TrollScriptHook] Hooked willPresentNotification on %@", NSStringFromClass(delegateClass));
         }
     } else {
-        // 如果类没有实现该方法，添加一个
+        // 如果类没有实现该方法，添加一个（不需要存储原始 IMP，因为没有）
         class_addMethod(delegateClass, willPresentSel, (IMP)swizzled_willPresentNotification,
                        "v@:@@?");
         NSLog(@"[TrollScriptHook] Added willPresentNotification to %@", NSStringFromClass(delegateClass));
@@ -331,10 +364,12 @@ static void hookDelegateClass(Class delegateClass) {
     if (class_respondsToSelector(delegateClass, didReceiveSel)) {
         Method originalMethod = class_getInstanceMethod(delegateClass, didReceiveSel);
         if (originalMethod) {
-            _originalDidReceiveResponse = method_setImplementation(originalMethod, (IMP)swizzled_didReceiveResponse);
+            IMP originalIMP = method_setImplementation(originalMethod, (IMP)swizzled_didReceiveResponse);
+            setOriginalDidReceiveIMP(delegateClass, originalIMP);
             NSLog(@"[TrollScriptHook] Hooked didReceiveResponse on %@", NSStringFromClass(delegateClass));
         }
     } else {
+        // 如果类没有实现该方法，添加一个（不需要存储原始 IMP，因为没有）
         class_addMethod(delegateClass, didReceiveSel, (IMP)swizzled_didReceiveResponse,
                        "v@:@@?");
         NSLog(@"[TrollScriptHook] Added didReceiveResponse to %@", NSStringFromClass(delegateClass));
