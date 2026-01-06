@@ -284,12 +284,12 @@ static void swizzled_willPresentNotification(id self, SEL _cmd,
         ((void (*)(id, SEL, UNUserNotificationCenter *, UNNotification *, void (^)(UNNotificationPresentationOptions)))
          originalIMP)(self, _cmd, center, notification, completionHandler);
     } else if (completionHandler) {
-        // 默认行为：显示通知
+        // 默认行为：显示通知 (iOS 14+ only for rootless)
+        UNNotificationPresentationOptions options = UNNotificationPresentationOptionSound;
         if (@available(iOS 14.0, *)) {
-            completionHandler(UNNotificationPresentationOptionBanner | UNNotificationPresentationOptionSound);
-        } else {
-            completionHandler(UNNotificationPresentationOptionAlert | UNNotificationPresentationOptionSound);
+            options |= UNNotificationPresentationOptionBanner | UNNotificationPresentationOptionList;
         }
+        completionHandler(options);
     }
 }
 
