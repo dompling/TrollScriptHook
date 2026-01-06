@@ -9,6 +9,9 @@ on:
 permissions:
   contents: write
 
+env:
+  THEOS: ${{ github.workspace }}/theos
+
 jobs:
   build:
     runs-on: macos-latest
@@ -18,11 +21,53 @@ jobs:
         with:
           submodules: recursive
 
+      # 缓存 Theos 环境
+      - name: Cache Theos
+        id: cache-theos
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ github.workspace }}/theos
+          key: theos-${{ runner.os }}-${{ hashFiles('.theos_version', 'Makefile') }}
+          restore-keys: |
+            theos-${{ runner.os }}-
+
+      # 缓存 Theos SDKs
+      - name: Cache Theos SDKs
+        id: cache-sdks
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ github.workspace }}/theos/sdks
+          key: theos-sdks-${{ runner.os }}-ios16
+          restore-keys: |
+            theos-sdks-${{ runner.os }}-
+
+      # 仅在缓存未命中时设置 Theos
       - name: Setup Theos
-        uses: Randomblock1/theos-action@v1
+        if: steps.cache-theos.outputs.cache-hit != 'true'
+        run: |
+          echo "Installing Theos..."
+          git clone --recursive https://github.com/theos/theos.git $THEOS
+
+      # 仅在 SDK 缓存未命中时下载 SDK
+      - name: Setup iOS SDK
+        if: steps.cache-sdks.outputs.cache-hit != 'true'
+        run: |
+          echo "Downloading iOS SDK..."
+          mkdir -p $THEOS/sdks
+          curl -L https://github.com/theos/sdks/archive/master.tar.gz | tar -xz --strip-components=1 -C $THEOS/sdks
+
+      # 安装必要的依赖（这些通常已预装在 macos-latest 上）
+      - name: Install Dependencies
+        run: |
+          brew list ldid &>/dev/null || brew install ldid
+          brew list dpkg &>/dev/null || brew install dpkg
 
       - name: Build Tweak
         run: |
+          export THEOS=${{ github.workspace }}/theos
+          export PATH="$THEOS/bin:$PATH"
           export THEOS_PACKAGE_SCHEME=rootless
           make package FINALPACKAGE=1
 

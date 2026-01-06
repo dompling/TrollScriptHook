@@ -413,7 +413,8 @@ static void hookDelegateClass(Class delegateClass) {
 
 // Hook 获取已投递的通知
 - (void)getDeliveredNotificationsWithCompletionHandler:(void (^)(NSArray<UNNotification *> *))completionHandler {
-    %orig(^(NSArray<UNNotification *> *notifications) {
+    // 创建包装的 completion handler
+    void (^wrappedHandler)(NSArray<UNNotification *> *) = ^(NSArray<UNNotification *> *notifications) {
         @try {
             for (UNNotification *notification in notifications) {
                 NSDictionary *info = buildNotificationInfo(notification.request.content,
@@ -428,10 +429,13 @@ static void hookDelegateClass(Class delegateClass) {
             NSLog(@"[TrollScriptHook] Error in getDeliveredNotifications: %@", e);
         }
 
+        // 调用原始的 completionHandler
         if (completionHandler) {
             completionHandler(notifications);
         }
-    });
+    };
+
+    %orig(wrappedHandler);
 }
 
 %end
