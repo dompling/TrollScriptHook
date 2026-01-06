@@ -3,11 +3,11 @@ name: Build and Release Tweak
 on:
   push:
     tags:
-      - 'v*' # 当你推送以 v 开头的 tag 时触发，例如 v1.0
-  workflow_dispatch: # 也可以手动触发
+      - 'v*'
+  workflow_dispatch:
 
 permissions:
-  contents: write # 允许创建 Release
+  contents: write
 
 jobs:
   build:
@@ -23,30 +23,49 @@ jobs:
 
       - name: Build Tweak
         run: |
-          # 如果是 iOS 15+ 记得开启 rootless 模式（根据需求修改）
           export THEOS_PACKAGE_SCHEME=rootless
           make package FINALPACKAGE=1
-          
+
       - name: Prepare Release Files
         run: |
           mkdir -p build_output
-          # 拷贝 .deb 文件
+          # 只拷贝 .deb 和 .dylib
           cp packages/*.deb build_output/
-          # 提取 .dylib 和 .plist (通常在 .theos/obj/ 目录下)
-          # 注意：根据你的 Makefile 配置，路径可能略有不同
           find .theos/obj -name "*.dylib" -exec cp {} build_output/ \;
-          find . -name "*.plist" ! -path "./.theos/*" -exec cp {} build_output/ \;
+          # 列出文件确认
+          ls -la build_output/
 
-      - name: Create GitHub Release
+      - name: Create Versioned Release
         uses: softprops/action-gh-release@v1
         with:
           files: |
             build_output/*.deb
             build_output/*.dylib
-            build_output/*.plist
           name: Release ${{ github.ref_name }}
-          tag_name: ${{ github.ref }}
+          tag_name: ${{ github.ref_name }}
           draft: false
           prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update Latest Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            build_output/*.deb
+            build_output/*.dylib
+          name: Latest Release
+          tag_name: latest
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update Latest Tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -f latest
+          git push origin latest --force
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
