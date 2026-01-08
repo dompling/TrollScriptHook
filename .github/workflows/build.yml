@@ -1,0 +1,64 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g., v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup Xcode
+      uses: maxim-lobanov/setup-xcode@v1
+      with:
+        xcode-version: latest-stable
+
+    - name: Build dylib
+      run: |
+        chmod +x build.sh
+        ./build.sh
+
+    - name: Get version
+      id: version
+      run: |
+        if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+          echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+        else
+          echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ steps.version.outputs.version }}
+        name: TrollScriptHook ${{ steps.version.outputs.version }}
+        body: |
+          ## TrollScriptHook ${{ steps.version.outputs.version }}
+
+          ### Changes
+          - Pure Objective-C Runtime implementation (no Substrate dependency)
+          - Compatible with TrollStore injection
+
+          ### Installation
+          Download `TrollScriptHook.dylib` and use with TrollScript app.
+
+          ### Supported Architectures
+          - arm64
+          - arm64e
+        files: |
+          build/TrollScriptHook.dylib
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
