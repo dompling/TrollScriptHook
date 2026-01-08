@@ -1,9 +1,0 @@
-Package: com.trollscript.hook
-Name: TrollScriptHook
-Version: 1.0.0
-Architecture: iphoneos-arm64
-Description: Notification hook for TrollScript automation
-Maintainer: TrollScript
-Author: TrollScript
-Section: Tweaks
-Depends: mobilesubstrate
